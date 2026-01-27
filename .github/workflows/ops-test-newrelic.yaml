@@ -212,7 +212,7 @@ jobs:
           echo "### ✅ Integration Test Complete" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**Next Steps:**" >> $GITHUB_STEP_SUMMARY
-          echo "1. The New Relic analysis templates are ready in \`.opsera-voting-app/k8s/base/rollouts/\`" >> $GITHUB_STEP_SUMMARY
+          echo "1. The New Relic analysis templates are ready in \`.opsera-voting-app-enterprise-2/k8s/base/rollouts/\`" >> $GITHUB_STEP_SUMMARY
           echo "2. Deploy to trigger canary analysis with New Relic metrics" >> $GITHUB_STEP_SUMMARY
           echo "3. Monitor canary progress in the [Canary Monitor](../workflows/50-cd-canary-monitor.yaml)" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

@@ -1,16 +1,20 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: voting-app-enterprise-2-dev
+  name: voting-app-enterprise-2-qa
   namespace: argocd
   labels:
     app.kubernetes.io/name: voting-app-enterprise-2
     app.kubernetes.io/part-of: voting-app-enterprise-2
-    environment: dev
+    environment: qa
+    deployment-strategy: canary
   annotations:
     notifications.argoproj.io/subscribe.on-sync-succeeded.slack: deployments
     notifications.argoproj.io/subscribe.on-sync-failed.slack: deployments
     notifications.argoproj.io/subscribe.on-health-degraded.slack: alerts
+    # Canary-specific notifications
+    notifications.argoproj.io/subscribe.on-rollout-step-completed.slack: deployments
+    notifications.argoproj.io/subscribe.on-rollout-aborted.slack: alerts
   finalizers:
     - resources-finalizer.argocd.argoproj.io
 spec:
@@ -19,12 +23,12 @@ spec:
   source:
     repoURL: https://github.com/Opsera-Test-M/voting-app-enterprise-1.git
     targetRevision: main
-    path: .opsera-voting-app/k8s/overlays/dev
+    path: .opsera-voting-app-enterprise-2/k8s/overlays/qa
 
   destination:
     # Use cluster name, not server URL (RULE 10)
     name: opsera-usw2-np
-    namespace: voting-app-enterprise-2-dev
+    namespace: voting-app-enterprise-2-qa
 
   syncPolicy:
     automated:
@@ -36,6 +40,8 @@ spec:
       - PrunePropagationPolicy=foreground
       - PruneLast=true
       - ApplyOutOfSyncOnly=true
+      # Required for Argo Rollouts
+      - RespectIgnoreDifferences=true
     retry:
       limit: 5
       backoff:
@@ -43,8 +49,13 @@ spec:
         factor: 2
         maxDuration: 3m
 
-  # Health check overrides for StatefulSets
+  # Ignore differences for Rollout status fields (managed by Argo Rollouts)
   ignoreDifferences:
+    - group: argoproj.io
+      kind: Rollout
+      jsonPointers:
+        - /spec/replicas
+        - /status
     - group: apps
       kind: StatefulSet
       jsonPointers:

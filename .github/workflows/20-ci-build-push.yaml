@@ -144,7 +144,7 @@ jobs:
           FULL_IMAGE="${ECR_URI}/vote:${IMAGE_TAG}"
           
           docker build -t "$FULL_IMAGE" -t "${ECR_URI}/vote:latest" \
-            -f .opsera-voting-app/Dockerfile.vote .
+            -f .opsera-voting-app-enterprise-2/Dockerfile.vote .
           
           docker push "$FULL_IMAGE"
           docker push "${ECR_URI}/vote:latest"
@@ -189,7 +189,7 @@ jobs:
           FULL_IMAGE="${ECR_URI}/result:${IMAGE_TAG}"
           
           docker build -t "$FULL_IMAGE" -t "${ECR_URI}/result:latest" \
-            -f .opsera-voting-app/Dockerfile.result .
+            -f .opsera-voting-app-enterprise-2/Dockerfile.result .
           
           docker push "$FULL_IMAGE"
           docker push "${ECR_URI}/result:latest"
@@ -234,7 +234,7 @@ jobs:
           FULL_IMAGE="${ECR_URI}/worker:${IMAGE_TAG}"
           
           docker build -t "$FULL_IMAGE" -t "${ECR_URI}/worker:latest" \
-            -f .opsera-voting-app/Dockerfile.worker .
+            -f .opsera-voting-app-enterprise-2/Dockerfile.worker .
           
           docker push "$FULL_IMAGE"
           docker push "${ECR_URI}/worker:latest"
