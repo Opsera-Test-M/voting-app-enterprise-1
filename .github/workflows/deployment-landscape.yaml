@@ -282,7 +282,7 @@ jobs:
           done
 
       # ============================================
-      # Canary Status (QA Environment)
+      # Canary Status (QA Environment) - Enhanced
       # ============================================
       - name: Canary Deployment Status
         run: |
@@ -295,47 +295,174 @@ jobs:
           NAMESPACE="${{ env.APP_NAME }}-qa"
           
           # Check if namespace exists
-          if kubectl get namespace "${NAMESPACE}" &>/dev/null; then
-            echo "| Rollout | Phase | Step | Message | Replicas (Ready/Desired) |" >> $GITHUB_STEP_SUMMARY
-            echo "|---------|-------|------|---------|--------------------------|" >> $GITHUB_STEP_SUMMARY
-            
-            for ROLLOUT in vote-rollout result-rollout; do
-              if kubectl get rollout "${ROLLOUT}" -n "${NAMESPACE}" &>/dev/null; then
-                # Get rollout status in JSON format
-                ROLLOUT_JSON=$(kubectl get rollout "${ROLLOUT}" -n "${NAMESPACE}" -o json 2>/dev/null)
-                
-                PHASE=$(echo "$ROLLOUT_JSON" | jq -r '.status.phase // "Unknown"')
-                MESSAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.message // ""' | head -c 40)
-                REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.replicas // 0')
-                READY=$(echo "$ROLLOUT_JSON" | jq -r '.status.readyReplicas // 0')
-                STEP_INDEX=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentStepIndex // 0')
-                
-                # Count total steps
-                TOTAL_STEPS=$(echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps | length // 0')
-                
-                case "$PHASE" in
-                  "Healthy") PHASE_EMOJI="🟢" ;;
-                  "Progressing") PHASE_EMOJI="🔵" ;;
-                  "Paused") PHASE_EMOJI="⏸️" ;;
-                  "Degraded") PHASE_EMOJI="🔴" ;;
-                  *) PHASE_EMOJI="⚪" ;;
-                esac
-                
-                # Truncate message for display
-                if [ ${#MESSAGE} -gt 35 ]; then
-                  MESSAGE="${MESSAGE:0:35}..."
-                fi
-                
-                echo "| ${ROLLOUT} | ${PHASE_EMOJI} ${PHASE} | ${STEP_INDEX}/${TOTAL_STEPS} | ${MESSAGE:-N/A} | ${READY}/${REPLICAS} |" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "| ${ROLLOUT} | ⚪ Not Found | - | - | - |" >> $GITHUB_STEP_SUMMARY
-              fi
-            done
-          else
+          if ! kubectl get namespace "${NAMESPACE}" &>/dev/null; then
             echo "QA namespace not found. Canary deployments not configured." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            exit 0
           fi
           
+          # Summary Table
+          echo "### Rollout Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Rollout | Phase | Step | Canary Weight | Replicas (Stable/Canary) |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|-------|------|---------------|--------------------------|" >> $GITHUB_STEP_SUMMARY
+          
+          for ROLLOUT in vote-rollout result-rollout; do
+            if kubectl get rollout "${ROLLOUT}" -n "${NAMESPACE}" &>/dev/null; then
+              # Get rollout status in JSON format
+              ROLLOUT_JSON=$(kubectl get rollout "${ROLLOUT}" -n "${NAMESPACE}" -o json 2>/dev/null)
+              
+              PHASE=$(echo "$ROLLOUT_JSON" | jq -r '.status.phase // "Unknown"')
+              STEP_INDEX=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentStepIndex // 0')
+              TOTAL_STEPS=$(echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps | length // 0')
+              
+              # Get canary weight
+              CANARY_WEIGHT=$(echo "$ROLLOUT_JSON" | jq -r '.status.canary.weights.canary // 0')
+              STABLE_WEIGHT=$(echo "$ROLLOUT_JSON" | jq -r '.status.canary.weights.stable // 100')
+              
+              # Get replica counts
+              STABLE_REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.stableRS // "N/A"')
+              CANARY_REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.canary.replicas // 0')
+              READY_REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.readyReplicas // 0')
+              TOTAL_REPLICAS=$(echo "$ROLLOUT_JSON" | jq -r '.status.replicas // 0')
+              
+              case "$PHASE" in
+                "Healthy") PHASE_EMOJI="🟢" ;;
+                "Progressing") PHASE_EMOJI="🔵" ;;
+                "Paused") PHASE_EMOJI="⏸️" ;;
+                "Degraded") PHASE_EMOJI="🔴" ;;
+                *) PHASE_EMOJI="⚪" ;;
+              esac
+              
+              echo "| ${ROLLOUT} | ${PHASE_EMOJI} ${PHASE} | ${STEP_INDEX}/${TOTAL_STEPS} | ${CANARY_WEIGHT}% | ${READY_REPLICAS}/${TOTAL_REPLICAS} |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| ${ROLLOUT} | ⚪ Not Found | - | - | - |" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Detailed Canary Information for each rollout
+          for ROLLOUT in vote-rollout result-rollout; do
+            if kubectl get rollout "${ROLLOUT}" -n "${NAMESPACE}" &>/dev/null; then
+              ROLLOUT_JSON=$(kubectl get rollout "${ROLLOUT}" -n "${NAMESPACE}" -o json 2>/dev/null)
+              
+              SERVICE_NAME=$(echo "$ROLLOUT" | sed 's/-rollout//')
+              PHASE=$(echo "$ROLLOUT_JSON" | jq -r '.status.phase // "Unknown"')
+              
+              echo "### ${SERVICE_NAME^} Canary Details" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Traffic Distribution
+              CANARY_WEIGHT=$(echo "$ROLLOUT_JSON" | jq -r '.status.canary.weights.canary // 0')
+              STABLE_WEIGHT=$((100 - CANARY_WEIGHT))
+              
+              echo "#### Traffic Distribution" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              printf "Stable:  [%-50s] %d%%\n" "$(printf '#%.0s' $(seq 1 $((STABLE_WEIGHT / 2))))" "$STABLE_WEIGHT" >> $GITHUB_STEP_SUMMARY
+              printf "Canary:  [%-50s] %d%%\n" "$(printf '#%.0s' $(seq 1 $((CANARY_WEIGHT / 2))))" "$CANARY_WEIGHT" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Step Progression
+              STEP_INDEX=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentStepIndex // 0')
+              TOTAL_STEPS=$(echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps | length // 0')
+              
+              echo "#### Canary Step Progression" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              
+              STEP_NUM=0
+              echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps[]' 2>/dev/null | while read -r STEP; do
+                WEIGHT=$(echo "$STEP" | jq -r '.setWeight // empty')
+                PAUSE=$(echo "$STEP" | jq -r '.pause.duration // empty')
+                
+                if [ "$STEP_NUM" -lt "$STEP_INDEX" ]; then
+                  MARKER="✅"
+                elif [ "$STEP_NUM" -eq "$STEP_INDEX" ]; then
+                  MARKER="▶️"
+                else
+                  MARKER="⬜"
+                fi
+                
+                if [ -n "$WEIGHT" ]; then
+                  echo "${MARKER} Step $((STEP_NUM + 1)): Set weight to ${WEIGHT}%" >> $GITHUB_STEP_SUMMARY
+                elif [ -n "$PAUSE" ]; then
+                  echo "${MARKER} Step $((STEP_NUM + 1)): Pause for ${PAUSE}" >> $GITHUB_STEP_SUMMARY
+                fi
+                
+                STEP_NUM=$((STEP_NUM + 1))
+              done
+              
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Image Versions
+              STABLE_IMAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.stableRS // "N/A"')
+              CANARY_IMAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentPodHash // "N/A"')
+              CURRENT_IMAGE=$(echo "$ROLLOUT_JSON" | jq -r '.spec.template.spec.containers[0].image // "N/A"')
+              
+              echo "#### Image Versions" >> $GITHUB_STEP_SUMMARY
+              echo "| Version | Image/Hash |" >> $GITHUB_STEP_SUMMARY
+              echo "|---------|------------|" >> $GITHUB_STEP_SUMMARY
+              echo "| Current Image | \`${CURRENT_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| Stable RS | \`${STABLE_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| Canary RS | \`${CANARY_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Analysis Run Status
+              echo "#### Analysis Status" >> $GITHUB_STEP_SUMMARY
+              
+              ANALYSIS_RUNS=$(kubectl get analysisrun -n "${NAMESPACE}" -l "rollout-type=Background,rollouts-pod-template-hash" -o json 2>/dev/null | jq -r '.items | sort_by(.metadata.creationTimestamp) | reverse | .[0:3]')
+              
+              if [ -n "$ANALYSIS_RUNS" ] && [ "$ANALYSIS_RUNS" != "null" ]; then
+                echo "| Analysis Run | Status | Metrics | Started |" >> $GITHUB_STEP_SUMMARY
+                echo "|--------------|--------|---------|---------|" >> $GITHUB_STEP_SUMMARY
+                
+                kubectl get analysisrun -n "${NAMESPACE}" -o json 2>/dev/null | jq -r '.items | sort_by(.metadata.creationTimestamp) | reverse | .[0:3] | .[] | "\(.metadata.name)|\(.status.phase // "Unknown")|\(.status.metricResults | length // 0)|\(.metadata.creationTimestamp)"' | while IFS='|' read -r NAME STATUS METRICS CREATED; do
+                  case "$STATUS" in
+                    "Successful") STATUS_EMOJI="✅" ;;
+                    "Running") STATUS_EMOJI="🔵" ;;
+                    "Failed") STATUS_EMOJI="❌" ;;
+                    "Error") STATUS_EMOJI="⚠️" ;;
+                    *) STATUS_EMOJI="⚪" ;;
+                  esac
+                  
+                  # Format timestamp
+                  if [ -n "$CREATED" ]; then
+                    CREATED_SHORT=$(echo "$CREATED" | cut -c1-16 | tr 'T' ' ')
+                  else
+                    CREATED_SHORT="Unknown"
+                  fi
+                  
+                  echo "| \`${NAME:0:40}\` | ${STATUS_EMOJI} ${STATUS} | ${METRICS} | ${CREATED_SHORT} |" >> $GITHUB_STEP_SUMMARY
+                done
+              else
+                echo "No recent analysis runs found." >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              # Rollout Conditions/Messages
+              MESSAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.message // ""')
+              CONDITIONS=$(echo "$ROLLOUT_JSON" | jq -r '.status.conditions // []')
+              
+              if [ -n "$MESSAGE" ]; then
+                echo "#### Current Status Message" >> $GITHUB_STEP_SUMMARY
+                echo "> ${MESSAGE}" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              # Recent Events
+              echo "#### Recent Events" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              kubectl get events -n "${NAMESPACE}" --field-selector "involvedObject.name=${ROLLOUT}" --sort-by='.lastTimestamp' 2>/dev/null | tail -5 >> $GITHUB_STEP_SUMMARY || echo "No recent events" >> $GITHUB_STEP_SUMMARY
+              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              
+              echo "---" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
 
       # ============================================
       # Infrastructure Summary
