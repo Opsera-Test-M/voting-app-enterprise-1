@@ -32,12 +32,12 @@ RUN chown -R appuser:appgroup /usr/local/app
 
 USER appuser
 
-# Health check endpoint
+# Health check endpoint (use 8080 - non-root can't bind to ports < 1024)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:80/ || exit 1
+  CMD curl -f http://localhost:8080/ || exit 1
 
-ENV PORT=80
-EXPOSE 80
+ENV PORT=8080
+EXPOSE 8080
 
 # Use tini as init process for proper signal handling
 ENTRYPOINT ["/usr/bin/tini", "--"]

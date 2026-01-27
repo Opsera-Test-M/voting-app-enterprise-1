@@ -28,11 +28,11 @@ RUN chown -R appuser:appgroup /usr/local/app
 
 USER appuser
 
-# Health check endpoint
+# Health check endpoint (use 8080 - non-root can't bind to ports < 1024)
 HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
-  CMD curl -f http://localhost:80/ || exit 1
+  CMD curl -f http://localhost:8080/ || exit 1
 
-EXPOSE 80
+EXPOSE 8080
 
-# Run with gunicorn for production
-CMD ["gunicorn", "app:app", "-b", "0.0.0.0:80", "--log-file", "-", "--access-logfile", "-", "--workers", "4", "--keep-alive", "0"]
+# Run with gunicorn for production (port 8080 for non-root)
+CMD ["gunicorn", "app:app", "-b", "0.0.0.0:8080", "--log-file", "-", "--access-logfile", "-", "--workers", "4", "--keep-alive", "0"]
