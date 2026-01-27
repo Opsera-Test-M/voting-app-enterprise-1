@@ -78,7 +78,7 @@ env:
   # JIRA_PROJECT_KEY: PR1 (or your project key)
   # JIRA_USER_EMAIL: (optional, only needed for Atlassian Cloud basic auth)
   JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL || 'https://opsera-jira-mock-labs.agent.opsera.dev' }}
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
 
 jobs:
   jira-action:

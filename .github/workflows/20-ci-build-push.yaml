@@ -39,7 +39,7 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
 
 permissions:
   contents: write

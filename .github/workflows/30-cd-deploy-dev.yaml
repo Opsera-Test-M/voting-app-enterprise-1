@@ -29,12 +29,12 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
   ENVIRONMENT: dev
   HUB_CLUSTER: argocd-usw2
   SPOKE_CLUSTER: opsera-usw2-np
-  DEV_URL: https://opsera-voting-app-dev.agent.opsera.dev
-  DEV_RESULTS_URL: https://results.opsera-voting-app-dev.agent.opsera.dev
+  DEV_URL: https://opsera-voting-app-enterprise-2-dev.agent.opsera.dev
+  DEV_RESULTS_URL: https://results.opsera-voting-app-enterprise-2-dev.agent.opsera.dev
 
 permissions:
   contents: write

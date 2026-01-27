@@ -1,11 +1,11 @@
 apiVersion: argoproj.io/v1alpha1
 kind: Application
 metadata:
-  name: voting-app-qa
+  name: voting-app-enterprise-2-qa
   namespace: argocd
   labels:
-    app.kubernetes.io/name: voting-app
-    app.kubernetes.io/part-of: voting-app
+    app.kubernetes.io/name: voting-app-enterprise-2
+    app.kubernetes.io/part-of: voting-app-enterprise-2
     environment: qa
     deployment-strategy: canary
   annotations:
@@ -21,14 +21,14 @@ spec:
   project: default
 
   source:
-    repoURL: https://github.com/opsera-agentic/voting-app-enterprise-1.git
+    repoURL: https://github.com/Opsera-Test-M/voting-app-enterprise-1.git
     targetRevision: main
     path: .opsera-voting-app/k8s/overlays/qa
 
   destination:
     # Use cluster name, not server URL (RULE 10)
     name: opsera-usw2-np
-    namespace: voting-app-qa
+    namespace: voting-app-enterprise-2-qa
 
   syncPolicy:
     automated:

@@ -27,7 +27,7 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
   SPOKE_CLUSTER: opsera-usw2-np
   NAMESPACE: voting-app-qa
 
@@ -287,5 +287,5 @@ jobs:
           echo "| [📊 Refresh](../workflows/50-cd-canary-monitor.yaml?action=monitor) | Refresh status |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🔗 Environment URLs" >> $GITHUB_STEP_SUMMARY
-          echo "- **Vote App:** https://opsera-voting-app-qa.agent.opsera.dev" >> $GITHUB_STEP_SUMMARY
-          echo "- **Results:** https://results.opsera-voting-app-qa.agent.opsera.dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **Vote App:** https://opsera-voting-app-enterprise-2-qa.agent.opsera.dev" >> $GITHUB_STEP_SUMMARY
+          echo "- **Results:** https://results.opsera-voting-app-enterprise-2-qa.agent.opsera.dev" >> $GITHUB_STEP_SUMMARY

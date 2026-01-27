@@ -63,9 +63,9 @@ env:
   AWS_REGION: us-west-2
   SPOKE_CLUSTER: opsera-usw2-np
   HUB_CLUSTER: argocd-usw2
-  APP_NAME: voting-app
-  DEV_URL: https://opsera-voting-app-dev.agent.opsera.dev
-  QA_URL: https://opsera-voting-app-qa.agent.opsera.dev
+  APP_NAME: voting-app-enterprise-2
+  DEV_URL: https://opsera-voting-app-enterprise-2-dev.agent.opsera.dev
+  QA_URL: https://opsera-voting-app-enterprise-2-qa.agent.opsera.dev
 
 permissions:
   contents: read
@@ -617,8 +617,8 @@ DATA
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Environment | Vote App | Results App |" >> $GITHUB_STEP_SUMMARY
           echo "|-------------|----------|-------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| DEV | [${{ env.DEV_URL }}](${{ env.DEV_URL }}) | [results.dev](https://results.opsera-voting-app-dev.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
-          echo "| QA | [${{ env.QA_URL }}](${{ env.QA_URL }}) | [results.qa](https://results.opsera-voting-app-qa.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
+          echo "| DEV | [${{ env.DEV_URL }}](${{ env.DEV_URL }}) | [results.dev](https://results.opsera-voting-app-enterprise-2-dev.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
+          echo "| QA | [${{ env.QA_URL }}](${{ env.QA_URL }}) | [results.qa](https://results.opsera-voting-app-enterprise-2-qa.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### 🛠️ Technology Stack" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY

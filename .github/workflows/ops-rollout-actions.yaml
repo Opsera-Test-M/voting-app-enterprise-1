@@ -36,7 +36,7 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
   SPOKE_CLUSTER: opsera-usw2-np
 
 permissions:

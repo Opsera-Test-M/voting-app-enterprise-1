@@ -40,7 +40,7 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
   TENANT: opsera
   DOMAIN: agent.opsera.dev
   HUB_CLUSTER: argocd-usw2

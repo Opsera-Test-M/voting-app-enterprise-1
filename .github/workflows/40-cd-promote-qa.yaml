@@ -27,7 +27,7 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
   HUB_CLUSTER: argocd-usw2
   SPOKE_CLUSTER: opsera-usw2-np
 
@@ -183,7 +183,7 @@ jobs:
     if: ${{ github.event.inputs.skip_approval != 'true' }}
     environment:
       name: qa-approval
-      url: https://opsera-voting-app-qa.agent.opsera.dev
+      url: https://opsera-voting-app-enterprise-2-qa.agent.opsera.dev
     
     steps:
       - name: Approval Confirmed
@@ -296,7 +296,7 @@ jobs:
                   {"type": "section", "text": {"type": "mrkdwn", "text": "*Canary Deployment Started:*\n🐤 10% → 30% → 60% → 100%"}},
                   {"type": "actions", "elements": [
                     {"type": "button", "text": {"type": "plain_text", "text": "📊 Monitor Canary"}, "url": "${{ github.server_url }}/${{ github.repository }}/actions/workflows/50-cd-canary-monitor.yaml"},
-                    {"type": "button", "text": {"type": "plain_text", "text": "🔍 View QA"}, "url": "https://opsera-voting-app-qa.agent.opsera.dev"}
+                    {"type": "button", "text": {"type": "plain_text", "text": "🔍 View QA"}, "url": "https://opsera-voting-app-enterprise-2-qa.agent.opsera.dev"}
                   ]}
                 ]
               }]

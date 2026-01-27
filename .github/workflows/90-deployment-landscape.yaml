@@ -26,7 +26,7 @@ on:
 
 env:
   AWS_REGION: us-west-2
-  APP_NAME: voting-app
+  APP_NAME: voting-app-enterprise-2
   HUB_CLUSTER: argocd-usw2
   SPOKE_CLUSTER: opsera-usw2-np
 
@@ -248,8 +248,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Environment | Vote App | Results App |" >> $GITHUB_STEP_SUMMARY
           echo "|-------------|----------|-------------|" >> $GITHUB_STEP_SUMMARY
-          echo "| **DEV** | [opsera-voting-app-dev.agent.opsera.dev](https://opsera-voting-app-dev.agent.opsera.dev) | [results.opsera-voting-app-dev.agent.opsera.dev](https://results.opsera-voting-app-dev.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
-          echo "| **QA** 🐤 | [opsera-voting-app-qa.agent.opsera.dev](https://opsera-voting-app-qa.agent.opsera.dev) | [results.opsera-voting-app-qa.agent.opsera.dev](https://results.opsera-voting-app-qa.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **DEV** | [opsera-voting-app-enterprise-2-dev.agent.opsera.dev](https://opsera-voting-app-enterprise-2-dev.agent.opsera.dev) | [results.opsera-voting-app-enterprise-2-dev.agent.opsera.dev](https://results.opsera-voting-app-enterprise-2-dev.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
+          echo "| **QA** 🐤 | [opsera-voting-app-enterprise-2-qa.agent.opsera.dev](https://opsera-voting-app-enterprise-2-qa.agent.opsera.dev) | [results.opsera-voting-app-enterprise-2-qa.agent.opsera.dev](https://results.opsera-voting-app-enterprise-2-qa.agent.opsera.dev) |" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
       # ══════════════════════════════════════════════════════════════════════════
