@@ -353,72 +353,89 @@ jobs:
               echo "### ${SERVICE_NAME^} Canary Details" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               
-              # Traffic Distribution
-              CANARY_WEIGHT=$(echo "$ROLLOUT_JSON" | jq -r '.status.canary.weights.canary // 0')
+              # Traffic Distribution - use safer jq with type checking
+              CANARY_WEIGHT_RAW=$(echo "$ROLLOUT_JSON" | jq -r 'if .status.canary.weights.canary then .status.canary.weights.canary else 0 end')
+              # Ensure it's a number
+              if [[ "$CANARY_WEIGHT_RAW" =~ ^[0-9]+$ ]]; then
+                CANARY_WEIGHT=$CANARY_WEIGHT_RAW
+              else
+                CANARY_WEIGHT=0
+              fi
               STABLE_WEIGHT=$((100 - CANARY_WEIGHT))
               
               echo "#### Traffic Distribution" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-              printf "Stable:  [%-50s] %d%%\n" "$(printf '#%.0s' $(seq 1 $((STABLE_WEIGHT / 2))))" "$STABLE_WEIGHT" >> $GITHUB_STEP_SUMMARY
-              printf "Canary:  [%-50s] %d%%\n" "$(printf '#%.0s' $(seq 1 $((CANARY_WEIGHT / 2))))" "$CANARY_WEIGHT" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Traffic Type | Weight | Visual |" >> $GITHUB_STEP_SUMMARY
+              echo "|--------------|--------|--------|" >> $GITHUB_STEP_SUMMARY
+              
+              # Create visual bars
+              STABLE_BAR=""
+              CANARY_BAR=""
+              for i in $(seq 1 $((STABLE_WEIGHT / 5))); do STABLE_BAR="${STABLE_BAR}█"; done
+              for i in $(seq 1 $((CANARY_WEIGHT / 5))); do CANARY_BAR="${CANARY_BAR}█"; done
+              
+              echo "| **Stable** | ${STABLE_WEIGHT}% | \`${STABLE_BAR:-░}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Canary** | ${CANARY_WEIGHT}% | \`${CANARY_BAR:-░}\` |" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               
               # Step Progression
               STEP_INDEX=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentStepIndex // 0')
-              TOTAL_STEPS=$(echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps | length // 0')
+              TOTAL_STEPS=$(echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps | length')
               
-              echo "#### Canary Step Progression" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+              echo "#### Canary Step Progression (Step ${STEP_INDEX}/${TOTAL_STEPS})" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Step | Action | Status |" >> $GITHUB_STEP_SUMMARY
+              echo "|------|--------|--------|" >> $GITHUB_STEP_SUMMARY
               
-              STEP_NUM=0
-              echo "$ROLLOUT_JSON" | jq -r '.spec.strategy.canary.steps[]' 2>/dev/null | while read -r STEP; do
+              # Parse steps more safely
+              for i in $(seq 0 $((TOTAL_STEPS - 1))); do
+                STEP=$(echo "$ROLLOUT_JSON" | jq -r ".spec.strategy.canary.steps[$i]")
                 WEIGHT=$(echo "$STEP" | jq -r '.setWeight // empty')
                 PAUSE=$(echo "$STEP" | jq -r '.pause.duration // empty')
                 
-                if [ "$STEP_NUM" -lt "$STEP_INDEX" ]; then
-                  MARKER="✅"
-                elif [ "$STEP_NUM" -eq "$STEP_INDEX" ]; then
-                  MARKER="▶️"
+                if [ "$i" -lt "$STEP_INDEX" ]; then
+                  MARKER="✅ Complete"
+                elif [ "$i" -eq "$STEP_INDEX" ]; then
+                  MARKER="▶️ **Current**"
                 else
-                  MARKER="⬜"
+                  MARKER="⬜ Pending"
                 fi
                 
-                if [ -n "$WEIGHT" ]; then
-                  echo "${MARKER} Step $((STEP_NUM + 1)): Set weight to ${WEIGHT}%" >> $GITHUB_STEP_SUMMARY
-                elif [ -n "$PAUSE" ]; then
-                  echo "${MARKER} Step $((STEP_NUM + 1)): Pause for ${PAUSE}" >> $GITHUB_STEP_SUMMARY
+                STEP_NUM=$((i + 1))
+                if [ -n "$WEIGHT" ] && [ "$WEIGHT" != "null" ]; then
+                  echo "| ${STEP_NUM} | Set weight to **${WEIGHT}%** | ${MARKER} |" >> $GITHUB_STEP_SUMMARY
+                elif [ -n "$PAUSE" ] && [ "$PAUSE" != "null" ]; then
+                  echo "| ${STEP_NUM} | Pause for ${PAUSE} | ${MARKER} |" >> $GITHUB_STEP_SUMMARY
                 fi
-                
-                STEP_NUM=$((STEP_NUM + 1))
               done
               
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               
               # Image Versions
-              STABLE_IMAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.stableRS // "N/A"')
-              CANARY_IMAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentPodHash // "N/A"')
+              STABLE_RS=$(echo "$ROLLOUT_JSON" | jq -r '.status.stableRS // "N/A"')
+              CANARY_RS=$(echo "$ROLLOUT_JSON" | jq -r '.status.currentPodHash // "N/A"')
               CURRENT_IMAGE=$(echo "$ROLLOUT_JSON" | jq -r '.spec.template.spec.containers[0].image // "N/A"')
               
               echo "#### Image Versions" >> $GITHUB_STEP_SUMMARY
-              echo "| Version | Image/Hash |" >> $GITHUB_STEP_SUMMARY
-              echo "|---------|------------|" >> $GITHUB_STEP_SUMMARY
-              echo "| Current Image | \`${CURRENT_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
-              echo "| Stable RS | \`${STABLE_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
-              echo "| Canary RS | \`${CANARY_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Version | Value |" >> $GITHUB_STEP_SUMMARY
+              echo "|---------|-------|" >> $GITHUB_STEP_SUMMARY
+              echo "| **Current Image** | \`${CURRENT_IMAGE}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Stable ReplicaSet** | \`${STABLE_RS}\` |" >> $GITHUB_STEP_SUMMARY
+              echo "| **Canary ReplicaSet** | \`${CANARY_RS}\` |" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               
               # Analysis Run Status
-              echo "#### Analysis Status" >> $GITHUB_STEP_SUMMARY
+              echo "#### Analysis Runs" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
               
-              ANALYSIS_RUNS=$(kubectl get analysisrun -n "${NAMESPACE}" -l "rollout-type=Background,rollouts-pod-template-hash" -o json 2>/dev/null | jq -r '.items | sort_by(.metadata.creationTimestamp) | reverse | .[0:3]')
+              ANALYSIS_COUNT=$(kubectl get analysisrun -n "${NAMESPACE}" -o json 2>/dev/null | jq '.items | length')
               
-              if [ -n "$ANALYSIS_RUNS" ] && [ "$ANALYSIS_RUNS" != "null" ]; then
+              if [ "$ANALYSIS_COUNT" -gt 0 ] 2>/dev/null; then
                 echo "| Analysis Run | Status | Metrics | Started |" >> $GITHUB_STEP_SUMMARY
                 echo "|--------------|--------|---------|---------|" >> $GITHUB_STEP_SUMMARY
                 
-                kubectl get analysisrun -n "${NAMESPACE}" -o json 2>/dev/null | jq -r '.items | sort_by(.metadata.creationTimestamp) | reverse | .[0:3] | .[] | "\(.metadata.name)|\(.status.phase // "Unknown")|\(.status.metricResults | length // 0)|\(.metadata.creationTimestamp)"' | while IFS='|' read -r NAME STATUS METRICS CREATED; do
+                kubectl get analysisrun -n "${NAMESPACE}" -o json 2>/dev/null | jq -r '.items | sort_by(.metadata.creationTimestamp) | reverse | .[0:3] | .[] | [.metadata.name, (.status.phase // "Unknown"), ((.status.metricResults | length) // 0), .metadata.creationTimestamp] | @tsv' | while IFS=$'\t' read -r NAME STATUS METRICS CREATED; do
                   case "$STATUS" in
                     "Successful") STATUS_EMOJI="✅" ;;
                     "Running") STATUS_EMOJI="🔵" ;;
@@ -428,37 +445,50 @@ jobs:
                   esac
                   
                   # Format timestamp
-                  if [ -n "$CREATED" ]; then
-                    CREATED_SHORT=$(echo "$CREATED" | cut -c1-16 | tr 'T' ' ')
-                  else
-                    CREATED_SHORT="Unknown"
-                  fi
+                  CREATED_SHORT=$(echo "$CREATED" | cut -c1-16 | tr 'T' ' ' || echo "Unknown")
+                  NAME_SHORT="${NAME:0:35}"
                   
-                  echo "| \`${NAME:0:40}\` | ${STATUS_EMOJI} ${STATUS} | ${METRICS} | ${CREATED_SHORT} |" >> $GITHUB_STEP_SUMMARY
+                  echo "| \`${NAME_SHORT}\` | ${STATUS_EMOJI} ${STATUS} | ${METRICS} | ${CREATED_SHORT} |" >> $GITHUB_STEP_SUMMARY
                 done
               else
-                echo "No recent analysis runs found." >> $GITHUB_STEP_SUMMARY
+                echo "No analysis runs found." >> $GITHUB_STEP_SUMMARY
               fi
               
               echo "" >> $GITHUB_STEP_SUMMARY
               
               # Rollout Conditions/Messages
               MESSAGE=$(echo "$ROLLOUT_JSON" | jq -r '.status.message // ""')
-              CONDITIONS=$(echo "$ROLLOUT_JSON" | jq -r '.status.conditions // []')
               
-              if [ -n "$MESSAGE" ]; then
-                echo "#### Current Status Message" >> $GITHUB_STEP_SUMMARY
-                echo "> ${MESSAGE}" >> $GITHUB_STEP_SUMMARY
+              if [ -n "$MESSAGE" ] && [ "$MESSAGE" != "null" ]; then
+                echo "#### Current Status" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "> **Message:** ${MESSAGE}" >> $GITHUB_STEP_SUMMARY
                 echo "" >> $GITHUB_STEP_SUMMARY
               fi
               
               # Recent Events
               echo "#### Recent Events" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-              kubectl get events -n "${NAMESPACE}" --field-selector "involvedObject.name=${ROLLOUT}" --sort-by='.lastTimestamp' 2>/dev/null | tail -5 >> $GITHUB_STEP_SUMMARY || echo "No recent events" >> $GITHUB_STEP_SUMMARY
-              echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
               
+              EVENTS=$(kubectl get events -n "${NAMESPACE}" --field-selector "involvedObject.name=${ROLLOUT}" --sort-by='.lastTimestamp' -o json 2>/dev/null | jq -r '.items | sort_by(.lastTimestamp) | reverse | .[0:5] | .[] | [.lastTimestamp, .type, .reason, .message] | @tsv')
+              
+              if [ -n "$EVENTS" ]; then
+                echo "| Time | Type | Reason | Message |" >> $GITHUB_STEP_SUMMARY
+                echo "|------|------|--------|---------|" >> $GITHUB_STEP_SUMMARY
+                echo "$EVENTS" | while IFS=$'\t' read -r TIME TYPE REASON MSG; do
+                  TIME_SHORT=$(echo "$TIME" | cut -c12-19 || echo "Unknown")
+                  MSG_SHORT="${MSG:0:40}"
+                  [ ${#MSG} -gt 40 ] && MSG_SHORT="${MSG_SHORT}..."
+                  TYPE_EMOJI="⚪"
+                  [ "$TYPE" = "Normal" ] && TYPE_EMOJI="✅"
+                  [ "$TYPE" = "Warning" ] && TYPE_EMOJI="⚠️"
+                  echo "| ${TIME_SHORT} | ${TYPE_EMOJI} ${TYPE} | ${REASON} | ${MSG_SHORT} |" >> $GITHUB_STEP_SUMMARY
+                done
+              else
+                echo "No recent events found." >> $GITHUB_STEP_SUMMARY
+              fi
+              
+              echo "" >> $GITHUB_STEP_SUMMARY
               echo "---" >> $GITHUB_STEP_SUMMARY
               echo "" >> $GITHUB_STEP_SUMMARY
             fi
