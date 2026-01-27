@@ -41,12 +41,20 @@ jobs:
     outputs:
       ecr_uri: ${{ steps.ecr.outputs.ecr_uri }}
       environment: ${{ steps.env.outputs.environment }}
+      image_tag: ${{ steps.tag.outputs.image_tag }}
     steps:
       - name: Set Environment
         id: env
         run: |
           ENV="${{ github.event.inputs.environment || 'dev' }}"
           echo "environment=${ENV}" >> $GITHUB_OUTPUT
+
+      - name: Generate Image Tag
+        id: tag
+        run: |
+          IMAGE_TAG="${GITHUB_SHA:0:7}-$(date +%Y%m%d%H%M%S)"
+          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
+          echo "Image Tag: ${IMAGE_TAG}"
 
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -169,8 +177,6 @@ jobs:
     strategy:
       matrix:
         service: [vote, result, worker]
-    outputs:
-      image_tag: ${{ steps.build.outputs.image_tag }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -189,8 +195,8 @@ jobs:
         id: build
         env:
           ECR_URI: ${{ needs.verify-prerequisites.outputs.ecr_uri }}
+          IMAGE_TAG: ${{ needs.verify-prerequisites.outputs.image_tag }}
         run: |
-          IMAGE_TAG="${GITHUB_SHA:0:7}-$(date +%Y%m%d%H%M%S)"
           FULL_IMAGE="${ECR_URI}/${{ matrix.service }}:${IMAGE_TAG}"
           LATEST_IMAGE="${ECR_URI}/${{ matrix.service }}:latest"
 
@@ -210,7 +216,6 @@ jobs:
           docker push "$FULL_IMAGE"
           docker push "$LATEST_IMAGE"
 
-          echo "image_tag=${IMAGE_TAG}" >> $GITHUB_OUTPUT
           echo "### Build Complete - ${{ matrix.service }}" >> $GITHUB_STEP_SUMMARY
           echo "Image: \`${FULL_IMAGE}\`" >> $GITHUB_STEP_SUMMARY
 
@@ -231,7 +236,7 @@ jobs:
         env:
           ECR_URI: ${{ needs.verify-prerequisites.outputs.ecr_uri }}
           ENV: ${{ needs.verify-prerequisites.outputs.environment }}
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          IMAGE_TAG: ${{ needs.verify-prerequisites.outputs.image_tag }}
         run: |
           KUSTOMIZE_FILE=".opsera-voting-app/k8s/overlays/${ENV}/kustomization.yaml"
 
@@ -334,7 +339,7 @@ jobs:
       - name: Generate Summary
         env:
           ENV: ${{ needs.verify-prerequisites.outputs.environment }}
-          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+          IMAGE_TAG: ${{ needs.verify-prerequisites.outputs.image_tag }}
         run: |
           echo "## Voting App Enterprise Deployment" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
