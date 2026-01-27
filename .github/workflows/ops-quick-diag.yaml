@@ -1,0 +1,113 @@
+# Quick diagnostic workflow for DEV environment
+name: "🩺 Ops: Quick Diagnostic"
+
+on:
+  workflow_dispatch:
+
+env:
+  AWS_REGION: us-west-2
+  SPOKE_CLUSTER: opsera-usw2-np
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  diagnose:
+    name: "🩺 Quick Diagnostic"
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: Configure AWS
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Install kubectl
+        run: |
+          curl -LO "https://dl.k8s.io/release/v1.28.0/bin/linux/amd64/kubectl"
+          chmod +x kubectl && sudo mv kubectl /usr/local/bin/
+
+      - name: Connect to Cluster
+        run: aws eks update-kubeconfig --name ${{ env.SPOKE_CLUSTER }} --region ${{ env.AWS_REGION }}
+
+      - name: Check DEV Environment
+        run: |
+          echo "## 🩺 Quick Diagnostic Report" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📦 DEV Namespace - Pods" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n voting-app-dev -o wide 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting pods"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔌 DEV - Services" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get svc -n voting-app-dev 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting services"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 DEV - Ingress" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get ingress -n voting-app-dev 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting ingress"
+          kubectl describe ingress -n voting-app-dev 2>&1 | head -40 >> $GITHUB_STEP_SUMMARY || true
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🎯 DEV - Endpoints" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get endpoints -n voting-app-dev 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting endpoints"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔄 DEV - Rollouts" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get rollouts -n voting-app-dev 2>&1 >> $GITHUB_STEP_SUMMARY || echo "No rollouts (using Deployments)"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 DEV - Recent Events" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get events -n voting-app-dev --sort-by='.lastTimestamp' 2>&1 | tail -15 >> $GITHUB_STEP_SUMMARY || echo "No events"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Check QA Environment
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          echo "### 📦 QA Namespace - Pods" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get pods -n voting-app-qa -o wide 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting pods"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔌 QA - Services" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get svc -n voting-app-qa 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting services"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 QA - Ingress" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          kubectl get ingress -n voting-app-qa 2>&1 >> $GITHUB_STEP_SUMMARY || echo "Error getting ingress"
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: HTTP Endpoint Test
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🌐 HTTP Tests" >> $GITHUB_STEP_SUMMARY
+          echo "| Environment | URL | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|-----|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          DEV_STATUS=$(curl -skI "https://opsera-voting-app.agent.opsera.dev/" 2>/dev/null | head -1 || echo "Error")
+          QA_STATUS=$(curl -skI "https://opsera-voting-app-qa.agent.opsera.dev/" 2>/dev/null | head -1 || echo "Error")
+          
+          echo "| DEV | https://opsera-voting-app.agent.opsera.dev | \`${DEV_STATUS}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| QA | https://opsera-voting-app-qa.agent.opsera.dev | \`${QA_STATUS}\` |" >> $GITHUB_STEP_SUMMARY
