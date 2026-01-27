@@ -18,10 +18,10 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - results.opsera-voting-app-qa.agent.opsera.dev
-    secretName: voting-app-result-qa-tls
+    - results.opsera-voting-app-enterprise-2-qa.agent.opsera.dev
+    secretName: voting-app-enterprise-2-result-qa-tls
   rules:
-  - host: results.opsera-voting-app-qa.agent.opsera.dev
+  - host: results.opsera-voting-app-enterprise-2-qa.agent.opsera.dev
     http:
       paths:
       - path: /
