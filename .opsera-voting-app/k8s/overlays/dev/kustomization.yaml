@@ -42,10 +42,10 @@ patches:
 images:
   - name: vote
     newName: 792373136340.dkr.ecr.us-west-2.amazonaws.com/vote
-    newTag: f5f08d5-20260127120344
+    newTag: fced009-20260127122619
   - name: result
     newName: 792373136340.dkr.ecr.us-west-2.amazonaws.com/result
-    newTag: f5f08d5-20260127120344
+    newTag: fced009-20260127122619
   - name: worker
     newName: 792373136340.dkr.ecr.us-west-2.amazonaws.com/worker
-    newTag: f5f08d5-20260127120344
+    newTag: fced009-20260127122619
