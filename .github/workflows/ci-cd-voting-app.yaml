@@ -256,12 +256,23 @@ jobs:
           # Update all image tags
           sed -i "s|newTag: .*|newTag: ${IMAGE_TAG}|g" "$KUSTOMIZE_FILE"
 
-          # Commit and push
+          # Commit and push (may fail with SAML SSO)
           git add "$KUSTOMIZE_FILE"
           git commit -m "chore: update images to ${IMAGE_TAG} [skip ci]" || echo "No changes to commit"
-          git push origin main
 
-          echo "### Kustomize Updated" >> $GITHUB_STEP_SUMMARY
+          if git push origin main 2>&1; then
+            echo "### Kustomize Updated Successfully" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "### Manual Update Required (SAML SSO)" >> $GITHUB_STEP_SUMMARY
+            echo "The git push failed (likely SAML SSO restriction)." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "**Run this command locally to update:**" >> $GITHUB_STEP_SUMMARY
+            echo '```bash' >> $GITHUB_STEP_SUMMARY
+            echo "sed -i '' 's|newTag: .*|newTag: ${IMAGE_TAG}|g' ${KUSTOMIZE_FILE}" >> $GITHUB_STEP_SUMMARY
+            echo "git add ${KUSTOMIZE_FILE} && git commit -m 'chore: update images to ${IMAGE_TAG}' && git push" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+          fi
+
           echo "Environment: ${ENV}" >> $GITHUB_STEP_SUMMARY
           echo "Image Tag: ${IMAGE_TAG}" >> $GITHUB_STEP_SUMMARY
 
