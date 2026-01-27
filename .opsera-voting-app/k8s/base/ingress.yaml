@@ -1,0 +1,36 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: voting-app
+  labels:
+    app.kubernetes.io/name: voting-app
+    app.kubernetes.io/component: ingress
+  annotations:
+    cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+spec:
+  ingressClassName: nginx
+  tls:
+  - hosts:
+    - PLACEHOLDER_SUBDOMAIN
+    secretName: voting-app-tls
+  rules:
+  # Vote frontend (main entry point)
+  - host: PLACEHOLDER_SUBDOMAIN
+    http:
+      paths:
+      - path: /
+        pathType: Prefix
+        backend:
+          service:
+            name: vote
+            port:
+              number: 80
+      - path: /results
+        pathType: Prefix
+        backend:
+          service:
+            name: result
+            port:
+              number: 80

@@ -1,0 +1,57 @@
+apiVersion: argoproj.io/v1alpha1
+kind: AppProject
+metadata:
+  name: voting-app
+  namespace: argocd
+  labels:
+    app.kubernetes.io/part-of: voting-app
+spec:
+  description: "Voting App Enterprise - Multi-service voting application"
+
+  # Source repositories allowed
+  sourceRepos:
+    - 'https://github.com/opsera-agentic/voting-app-enterprise-1.git'
+
+  # Destination clusters and namespaces
+  destinations:
+    - namespace: 'voting-app-*'
+      server: '*'
+      name: '*'
+
+  # Cluster resources allowed
+  clusterResourceWhitelist:
+    - group: ''
+      kind: Namespace
+    - group: 'networking.k8s.io'
+      kind: Ingress
+    - group: 'cert-manager.io'
+      kind: Certificate
+
+  # Namespace resources allowed (everything)
+  namespaceResourceWhitelist:
+    - group: '*'
+      kind: '*'
+
+  # Orphaned resources monitoring
+  orphanedResources:
+    warn: true
+
+  # Roles for RBAC
+  roles:
+    - name: developer
+      description: Developer access to voting-app
+      policies:
+        - p, proj:voting-app:developer, applications, get, voting-app/*, allow
+        - p, proj:voting-app:developer, applications, sync, voting-app/*, allow
+        - p, proj:voting-app:developer, logs, get, voting-app/*, allow
+      groups:
+        - developers
+
+    - name: admin
+      description: Admin access to voting-app
+      policies:
+        - p, proj:voting-app:admin, applications, *, voting-app/*, allow
+        - p, proj:voting-app:admin, repositories, *, voting-app/*, allow
+        - p, proj:voting-app:admin, clusters, *, voting-app/*, allow
+      groups:
+        - admins

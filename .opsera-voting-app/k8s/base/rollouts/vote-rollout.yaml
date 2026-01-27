@@ -1,0 +1,96 @@
+apiVersion: argoproj.io/v1alpha1
+kind: Rollout
+metadata:
+  name: vote-rollout
+  labels:
+    app.kubernetes.io/name: vote
+    app.kubernetes.io/component: frontend
+    app.kubernetes.io/part-of: voting-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: vote
+  template:
+    metadata:
+      labels:
+        app: vote
+        app.kubernetes.io/name: vote
+    spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: vote
+        image: vote:latest
+        imagePullPolicy: Always
+        ports:
+        - containerPort: 80
+          name: http
+        env:
+        - name: OPTION_A
+          valueFrom:
+            configMapKeyRef:
+              name: voting-app-config
+              key: OPTION_A
+        - name: OPTION_B
+          valueFrom:
+            configMapKeyRef:
+              name: voting-app-config
+              key: OPTION_B
+        resources:
+          requests:
+            cpu: "100m"
+            memory: "128Mi"
+          limits:
+            cpu: "500m"
+            memory: "256Mi"
+        livenessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 10
+          periodSeconds: 10
+        readinessProbe:
+          httpGet:
+            path: /
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 5
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - ALL
+  strategy:
+    canary:
+      # Canary traffic shifting: 10% -> 30% -> 60% -> 100%
+      steps:
+      - setWeight: 10
+      - pause: {duration: 2m}
+      - setWeight: 30
+      - pause: {duration: 2m}
+      - setWeight: 60
+      - pause: {duration: 2m}
+      - setWeight: 100
+
+      # Analysis template for automated rollback
+      analysis:
+        templates:
+        - templateName: success-rate
+        startingStep: 1
+        args:
+        - name: service-name
+          value: vote
+
+      # Traffic routing with NGINX Ingress
+      trafficRouting:
+        nginx:
+          stableIngress: voting-app
+          annotationPrefix: nginx.ingress.kubernetes.io
+
+      # Anti-affinity for spreading pods
+      antiAffinity:
+        preferredDuringSchedulingIgnoredDuringExecution:
+          weight: 100
