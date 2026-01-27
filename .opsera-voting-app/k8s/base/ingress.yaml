@@ -13,11 +13,11 @@ spec:
   ingressClassName: nginx
   tls:
   - hosts:
-    - opsera-voting-app-dev.agent.opsera.dev
+    - opsera-voting-app.agent.opsera.dev
     secretName: voting-app-tls
   rules:
   # Vote frontend (main entry point)
-  - host: opsera-voting-app-dev.agent.opsera.dev
+  - host: opsera-voting-app.agent.opsera.dev
     http:
       paths:
       - path: /
@@ -25,12 +25,5 @@ spec:
         backend:
           service:
             name: vote
-            port:
-              number: 80
-      - path: /results
-        pathType: Prefix
-        backend:
-          service:
-            name: result
             port:
               number: 80

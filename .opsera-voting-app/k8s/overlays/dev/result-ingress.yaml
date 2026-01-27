@@ -1,12 +1,14 @@
-# Patch for main vote ingress
+# Separate ingress for result app with path rewrite
 apiVersion: networking.k8s.io/v1
 kind: Ingress
 metadata:
-  name: voting-app
+  name: voting-app-result
   labels:
     environment: dev
   annotations:
     cert-manager.io/cluster-issuer: "letsencrypt-prod"
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/rewrite-target: /$2
 spec:
   ingressClassName: nginx
   tls:
@@ -17,10 +19,10 @@ spec:
   - host: opsera-voting-app-dev.agent.opsera.dev
     http:
       paths:
-      - path: /
-        pathType: Prefix
+      - path: /results(/|$)(.*)
+        pathType: ImplementationSpecific
         backend:
           service:
-            name: vote
+            name: result
             port:
               number: 80

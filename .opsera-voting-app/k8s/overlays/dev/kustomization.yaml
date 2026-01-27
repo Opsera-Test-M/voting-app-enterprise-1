@@ -11,6 +11,8 @@ resources:
   # Dev-only: Use Deployments with emptyDir instead of StatefulSets (no EBS CSI driver)
   - db-deployment.yaml
   - redis-deployment.yaml
+  # Separate ingress for result app with path rewrite
+  - result-ingress.yaml
 
 # Exclude StatefulSets from base (replaced by Deployments above)
 patchesStrategicMerge:
