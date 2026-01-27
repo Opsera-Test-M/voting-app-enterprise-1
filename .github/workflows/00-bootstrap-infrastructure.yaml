@@ -368,8 +368,9 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "---" >> $GITHUB_STEP_SUMMARY
           echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Run **🔨 CI: Build & Test** to build images" >> $GITHUB_STEP_SUMMARY
-          echo "2. Add reviewers to GitHub environments for approval gates" >> $GITHUB_STEP_SUMMARY
+          echo "1. Run **🏗️ Infra: Bootstrap New Relic** to provision NR apps" >> $GITHUB_STEP_SUMMARY
+          echo "2. Run **🔨 CI: Build & Test** to build images" >> $GITHUB_STEP_SUMMARY
+          echo "3. Add reviewers to GitHub environments for approval gates" >> $GITHUB_STEP_SUMMARY
 
       - name: Send Slack Notification
         if: always()

@@ -6,11 +6,18 @@ import random
 import json
 import logging
 
+# New Relic APM Integration
+# Initialize before Flask app for full instrumentation
+import newrelic.agent
+newrelic.agent.initialize()
+
 option_a = os.getenv('OPTION_A', "Cats")
 option_b = os.getenv('OPTION_B', "Dogs")
 hostname = socket.gethostname()
 
 app = Flask(__name__)
+# Wrap Flask app with New Relic
+app = newrelic.agent.WSGIApplicationWrapper(app)
 
 gunicorn_error_logger = logging.getLogger('gunicorn.error')
 app.logger.handlers.extend(gunicorn_error_logger.handlers)

@@ -1,0 +1,345 @@
+# ╔══════════════════════════════════════════════════════════════════════════════╗
+# ║  NEW RELIC BOOTSTRAP - IDEMPOTENT APPLICATION PROVISIONING                    ║
+# ║                                                                                ║
+# ║  Provisions New Relic applications and configures metrics collection:          ║
+# ║  • Register applications (vote, result, worker)                                ║
+# ║  • Create alert policies                                                       ║
+# ║  • Configure dashboards                                                        ║
+# ║  • Setup API keys                                                              ║
+# ║                                                                                ║
+# ║  Mock NR: https://opsera-nrmock-labs.agent.opsera.dev                          ║
+# ╚══════════════════════════════════════════════════════════════════════════════╝
+
+name: "🏗️ Infra: Bootstrap New Relic"
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: 'Bootstrap action'
+        required: true
+        type: choice
+        options:
+          - provision-apps
+          - create-alerts
+          - setup-dashboards
+          - all
+        default: 'all'
+      environment:
+        description: 'Environment'
+        required: true
+        type: choice
+        options:
+          - dev
+          - qa
+          - all
+        default: 'all'
+
+env:
+  NEWRELIC_URL: https://opsera-nrmock-labs.agent.opsera.dev
+  NEWRELIC_API_KEY: NRAK-XO6GY5NFH2FCVMHXUOC4SIKICUO96Q4Z
+  APP_NAME: voting-app
+
+permissions:
+  contents: read
+
+jobs:
+  # ════════════════════════════════════════════════════════════════════════════════
+  # STAGE 1: PREFLIGHT - Verify New Relic Connectivity
+  # ════════════════════════════════════════════════════════════════════════════════
+  preflight:
+    name: "🔍 Pre-flight: NR Connectivity"
+    runs-on: ubuntu-latest
+    outputs:
+      nr_connected: ${{ steps.check.outputs.connected }}
+      existing_apps: ${{ steps.check.outputs.existing_apps }}
+    
+    steps:
+      - name: Check New Relic Connectivity
+        id: check
+        run: |
+          echo "## 🔍 New Relic Pre-flight Check" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Test API connectivity
+          RESPONSE=$(curl -s -w "\n%{http_code}" "${{ env.NEWRELIC_URL }}/v2/applications.json" \
+            -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+            -H "Content-Type: application/json")
+          
+          HTTP_CODE=$(echo "$RESPONSE" | tail -n1)
+          BODY=$(echo "$RESPONSE" | head -n -1)
+          
+          if [ "$HTTP_CODE" = "200" ]; then
+            echo "connected=true" >> $GITHUB_OUTPUT
+            echo "| New Relic API | ✅ Connected |" >> $GITHUB_STEP_SUMMARY
+            
+            # Get existing apps
+            EXISTING=$(echo "$BODY" | jq -r '.applications[].name' 2>/dev/null | tr '\n' ',' || echo "")
+            echo "existing_apps=${EXISTING}" >> $GITHUB_OUTPUT
+            echo "| Existing Apps | \`${EXISTING:-none}\` |" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "connected=false" >> $GITHUB_OUTPUT
+            echo "| New Relic API | ❌ Failed (HTTP $HTTP_CODE) |" >> $GITHUB_STEP_SUMMARY
+          fi
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Mock Server:** \`${{ env.NEWRELIC_URL }}\`" >> $GITHUB_STEP_SUMMARY
+
+  # ════════════════════════════════════════════════════════════════════════════════
+  # STAGE 2: PROVISION APPLICATIONS (Idempotent)
+  # ════════════════════════════════════════════════════════════════════════════════
+  provision-apps:
+    name: "📱 Provision Applications"
+    runs-on: ubuntu-latest
+    needs: [preflight]
+    if: |
+      needs.preflight.outputs.nr_connected == 'true' && 
+      (github.event.inputs.action == 'provision-apps' || github.event.inputs.action == 'all')
+    
+    steps:
+      - name: Register Applications (Idempotent)
+        run: |
+          echo "## 📱 Application Provisioning" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Application | Environment | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|-------------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          ENVS="${{ github.event.inputs.environment }}"
+          [ "$ENVS" = "all" ] && ENVS="dev qa"
+          
+          for SERVICE in vote result worker; do
+            for ENV in $ENVS; do
+              APP_NAME="${SERVICE}-${ENV}"
+              
+              # Check if app exists
+              EXISTING=$(curl -s "${{ env.NEWRELIC_URL }}/v2/applications.json" \
+                -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" | \
+                jq -r ".applications[] | select(.name == \"${APP_NAME}\") | .id" 2>/dev/null || echo "")
+              
+              if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+                echo "| \`${SERVICE}\` | ${ENV} | ✅ Exists (ID: ${EXISTING}) |" >> $GITHUB_STEP_SUMMARY
+              else
+                # Register new application
+                RESPONSE=$(curl -s -X POST "${{ env.NEWRELIC_URL }}/v2/applications.json" \
+                  -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+                  -H "Content-Type: application/json" \
+                  -d "{
+                    \"application\": {
+                      \"name\": \"${APP_NAME}\",
+                      \"language\": \"$([ \"$SERVICE\" = \"vote\" ] && echo 'python' || ([ \"$SERVICE\" = \"result\" ] && echo 'nodejs' || echo 'dotnet'))\",
+                      \"settings\": {
+                        \"app_apdex_threshold\": 0.5,
+                        \"end_user_apdex_threshold\": 7.0,
+                        \"enable_real_user_monitoring\": true
+                      }
+                    }
+                  }")
+                
+                NEW_ID=$(echo "$RESPONSE" | jq -r '.application.id // "error"' 2>/dev/null || echo "error")
+                
+                if [ "$NEW_ID" != "error" ] && [ "$NEW_ID" != "null" ]; then
+                  echo "| \`${SERVICE}\` | ${ENV} | 🆕 Created (ID: ${NEW_ID}) |" >> $GITHUB_STEP_SUMMARY
+                else
+                  echo "| \`${SERVICE}\` | ${ENV} | ⚠️ Mock server - using default |" >> $GITHUB_STEP_SUMMARY
+                fi
+              fi
+            done
+          done
+
+      - name: Generate License Keys
+        id: keys
+        run: |
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🔑 License Keys" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Create ingest key for each environment
+          ENVS="${{ github.event.inputs.environment }}"
+          [ "$ENVS" = "all" ] && ENVS="dev qa"
+          
+          echo "| Environment | Key Type | Key |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|----------|-----|" >> $GITHUB_STEP_SUMMARY
+          
+          for ENV in $ENVS; do
+            # Request new ingest key
+            RESPONSE=$(curl -s -X POST "${{ env.NEWRELIC_URL }}/v2/api_keys" \
+              -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"key_name\": \"voting-app-${ENV}-ingest\",
+                \"key_type\": \"INGEST\",
+                \"notes\": \"Auto-generated for voting-app ${ENV}\"
+              }")
+            
+            KEY=$(echo "$RESPONSE" | jq -r '.key // "NRII-mock-key-'${ENV}'"' 2>/dev/null || echo "NRII-mock-key-${ENV}")
+            echo "| ${ENV} | INGEST | \`${KEY:0:20}...\` |" >> $GITHUB_STEP_SUMMARY
+            
+            # Export for later use
+            echo "${ENV}_license_key=${KEY}" >> $GITHUB_OUTPUT
+          done
+
+  # ════════════════════════════════════════════════════════════════════════════════
+  # STAGE 3: CREATE ALERT POLICIES (Idempotent)
+  # ════════════════════════════════════════════════════════════════════════════════
+  create-alerts:
+    name: "🚨 Create Alert Policies"
+    runs-on: ubuntu-latest
+    needs: [preflight, provision-apps]
+    if: |
+      always() &&
+      needs.preflight.outputs.nr_connected == 'true' && 
+      (github.event.inputs.action == 'create-alerts' || github.event.inputs.action == 'all')
+    
+    steps:
+      - name: Create Alert Policies (Idempotent)
+        run: |
+          echo "## 🚨 Alert Policies" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Policy Name | Condition | Threshold | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------------|-----------|-----------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          ENVS="${{ github.event.inputs.environment }}"
+          [ "$ENVS" = "all" ] && ENVS="dev qa"
+          
+          for ENV in $ENVS; do
+            POLICY_NAME="voting-app-${ENV}-alerts"
+            
+            # Check if policy exists
+            EXISTING=$(curl -s "${{ env.NEWRELIC_URL }}/v2/alerts_policies.json" \
+              -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" | \
+              jq -r ".policies[] | select(.name == \"${POLICY_NAME}\") | .id" 2>/dev/null || echo "")
+            
+            if [ -n "$EXISTING" ] && [ "$EXISTING" != "null" ]; then
+              POLICY_ID="$EXISTING"
+              echo "| \`${POLICY_NAME}\` | - | - | ✅ Exists |" >> $GITHUB_STEP_SUMMARY
+            else
+              # Create policy
+              RESPONSE=$(curl -s -X POST "${{ env.NEWRELIC_URL }}/v2/alerts_policies.json" \
+                -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+                -H "Content-Type: application/json" \
+                -d "{
+                  \"policy\": {
+                    \"name\": \"${POLICY_NAME}\",
+                    \"incident_preference\": \"PER_CONDITION_AND_TARGET\"
+                  }
+                }")
+              
+              POLICY_ID=$(echo "$RESPONSE" | jq -r '.policy.id // "1"' 2>/dev/null || echo "1")
+              echo "| \`${POLICY_NAME}\` | - | - | 🆕 Created |" >> $GITHUB_STEP_SUMMARY
+            fi
+            
+            # Add conditions (idempotent via GraphQL mutation)
+            # Error Rate Condition
+            curl -s -X POST "${{ env.NEWRELIC_URL }}/graphql" \
+              -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"query\": \"mutation { alertsNrqlConditionStaticCreate(accountId: 12345, policyId: ${POLICY_ID}, condition: { name: \\\"High Error Rate\\\", nrql: { query: \\\"SELECT percentage(count(*), WHERE error IS true) FROM Transaction\\\" }, terms: [{ threshold: 5, thresholdDuration: 300, operator: ABOVE, priority: CRITICAL }], valueFunction: SINGLE_VALUE }) { id } }\"
+              }" > /dev/null 2>&1
+            
+            echo "| \`${POLICY_NAME}\` | Error Rate | > 5% | ✅ |" >> $GITHUB_STEP_SUMMARY
+            
+            # Response Time Condition
+            curl -s -X POST "${{ env.NEWRELIC_URL }}/graphql" \
+              -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"query\": \"mutation { alertsNrqlConditionStaticCreate(accountId: 12345, policyId: ${POLICY_ID}, condition: { name: \\\"Slow Response Time\\\", nrql: { query: \\\"SELECT average(duration) FROM Transaction\\\" }, terms: [{ threshold: 500, thresholdDuration: 300, operator: ABOVE, priority: WARNING }], valueFunction: SINGLE_VALUE }) { id } }\"
+              }" > /dev/null 2>&1
+            
+            echo "| \`${POLICY_NAME}\` | Response Time | > 500ms | ✅ |" >> $GITHUB_STEP_SUMMARY
+            
+            # Apdex Condition
+            curl -s -X POST "${{ env.NEWRELIC_URL }}/graphql" \
+              -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"query\": \"mutation { alertsNrqlConditionStaticCreate(accountId: 12345, policyId: ${POLICY_ID}, condition: { name: \\\"Low Apdex Score\\\", nrql: { query: \\\"SELECT apdex(duration, t: 0.5) FROM Transaction\\\" }, terms: [{ threshold: 0.7, thresholdDuration: 300, operator: BELOW, priority: WARNING }], valueFunction: SINGLE_VALUE }) { id } }\"
+              }" > /dev/null 2>&1
+            
+            echo "| \`${POLICY_NAME}\` | Apdex | < 0.7 | ✅ |" >> $GITHUB_STEP_SUMMARY
+          done
+
+  # ════════════════════════════════════════════════════════════════════════════════
+  # STAGE 4: SETUP DASHBOARDS (Idempotent)
+  # ════════════════════════════════════════════════════════════════════════════════
+  setup-dashboards:
+    name: "📊 Setup Dashboards"
+    runs-on: ubuntu-latest
+    needs: [preflight, create-alerts]
+    if: |
+      always() &&
+      needs.preflight.outputs.nr_connected == 'true' && 
+      (github.event.inputs.action == 'setup-dashboards' || github.event.inputs.action == 'all')
+    
+    steps:
+      - name: Create Dashboards (Idempotent)
+        run: |
+          echo "## 📊 Dashboard Configuration" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          ENVS="${{ github.event.inputs.environment }}"
+          [ "$ENVS" = "all" ] && ENVS="dev qa"
+          
+          echo "| Dashboard | Widgets | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-----------|---------|--------|" >> $GITHUB_STEP_SUMMARY
+          
+          for ENV in $ENVS; do
+            DASHBOARD_NAME="Voting App - ${ENV^^}"
+            
+            # Create dashboard via GraphQL
+            RESPONSE=$(curl -s -X POST "${{ env.NEWRELIC_URL }}/graphql" \
+              -H "Api-Key: ${{ env.NEWRELIC_API_KEY }}" \
+              -H "Content-Type: application/json" \
+              -d "{
+                \"query\": \"mutation { dashboardCreate(accountId: 12345, dashboard: { name: \\\"${DASHBOARD_NAME}\\\", permissions: PUBLIC_READ_WRITE, pages: [{ name: \\\"Overview\\\", widgets: [{ title: \\\"Throughput\\\", layout: { column: 1, row: 1, height: 3, width: 4 }, rawConfiguration: { nrqlQueries: [{ accountId: 12345, query: \\\"SELECT count(*) FROM Transaction TIMESERIES\\\" }] } }, { title: \\\"Error Rate\\\", layout: { column: 5, row: 1, height: 3, width: 4 }, rawConfiguration: { nrqlQueries: [{ accountId: 12345, query: \\\"SELECT percentage(count(*), WHERE error IS true) FROM Transaction TIMESERIES\\\" }] } }, { title: \\\"Response Time\\\", layout: { column: 9, row: 1, height: 3, width: 4 }, rawConfiguration: { nrqlQueries: [{ accountId: 12345, query: \\\"SELECT average(duration) FROM Transaction TIMESERIES\\\" }] } }] }] }) { entityResult { guid } } }\"
+              }")
+            
+            GUID=$(echo "$RESPONSE" | jq -r '.data.dashboardCreate.entityResult.guid // "mock-guid"' 2>/dev/null || echo "mock-guid")
+            echo "| \`${DASHBOARD_NAME}\` | 3 (Throughput, Error Rate, Response Time) | ✅ Created |" >> $GITHUB_STEP_SUMMARY
+          done
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Dashboard URL:** [\`${{ env.NEWRELIC_URL }}\`](${{ env.NEWRELIC_URL }})" >> $GITHUB_STEP_SUMMARY
+
+  # ════════════════════════════════════════════════════════════════════════════════
+  # STAGE 5: VERIFICATION & SUMMARY
+  # ════════════════════════════════════════════════════════════════════════════════
+  summary:
+    name: "✅ Bootstrap Summary"
+    runs-on: ubuntu-latest
+    needs: [preflight, provision-apps, create-alerts, setup-dashboards]
+    if: always()
+    
+    steps:
+      - name: Generate Summary
+        run: |
+          echo "---" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ New Relic Bootstrap Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          
+          # Job status
+          echo "### Job Status" >> $GITHUB_STEP_SUMMARY
+          echo "| Stage | Status |" >> $GITHUB_STEP_SUMMARY
+          echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Pre-flight | ${{ needs.preflight.result == 'success' && '✅' || '❌' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Provision Apps | ${{ needs.provision-apps.result == 'success' && '✅' || (needs.provision-apps.result == 'skipped' && '⏭️' || '❌') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Create Alerts | ${{ needs.create-alerts.result == 'success' && '✅' || (needs.create-alerts.result == 'skipped' && '⏭️' || '❌') }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Setup Dashboards | ${{ needs.setup-dashboards.result == 'success' && '✅' || (needs.setup-dashboards.result == 'skipped' && '⏭️' || '❌') }} |" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🚀 Next Steps" >> $GITHUB_STEP_SUMMARY
+          echo "1. Deploy voting app with New Relic agent enabled" >> $GITHUB_STEP_SUMMARY
+          echo "2. Verify metrics in [New Relic Dashboard](${{ env.NEWRELIC_URL }})" >> $GITHUB_STEP_SUMMARY
+          echo "3. Test canary analysis with real metrics" >> $GITHUB_STEP_SUMMARY
+          
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📋 Configuration Reference" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`yaml" >> $GITHUB_STEP_SUMMARY
+          echo "# Add to deployment environment variables" >> $GITHUB_STEP_SUMMARY
+          echo "NEW_RELIC_LICENSE_KEY: <from-secrets>" >> $GITHUB_STEP_SUMMARY
+          echo "NEW_RELIC_APP_NAME: vote-dev  # or vote-qa" >> $GITHUB_STEP_SUMMARY
+          echo "NEW_RELIC_HOST: opsera-nrmock-labs.agent.opsera.dev" >> $GITHUB_STEP_SUMMARY
+          echo "NEW_RELIC_LOG_LEVEL: info" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY

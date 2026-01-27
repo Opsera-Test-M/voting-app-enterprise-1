@@ -55,6 +55,7 @@ labels:
 patches:
   - path: patch-rollout-replicas.yaml
   - path: patch-ingress.yaml
+  - path: patch-newrelic.yaml
 
 images:
   - name: vote
