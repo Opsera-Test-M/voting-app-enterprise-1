@@ -207,18 +207,19 @@ jobs:
           
           for ENV in $ENVS; do
             APP_NAME="${{ env.APP_NAME }}-${ENV}"
+            MANIFEST=".opsera-${{ env.APP_NAME }}/argocd/application-${ENV}.yaml"
             
-            if kubectl get application "$APP_NAME" -n argocd &>/dev/null; then
-              echo "| ${ENV} | \`${APP_NAME}\` | ✅ Already exists |" >> $GITHUB_STEP_SUMMARY
-            else
-              # Check if manifest exists
-              MANIFEST=".opsera-${{ env.APP_NAME }}/argocd/application-${ENV}.yaml"
-              if [ -f "$MANIFEST" ]; then
+            if [ -f "$MANIFEST" ]; then
+              # Always apply to ensure latest config (kubectl apply is idempotent)
+              if kubectl get application "$APP_NAME" -n argocd &>/dev/null; then
+                kubectl apply -f "$MANIFEST"
+                echo "| ${ENV} | \`${APP_NAME}\` | 🔄 Updated |" >> $GITHUB_STEP_SUMMARY
+              else
                 kubectl apply -f "$MANIFEST"
                 echo "| ${ENV} | \`${APP_NAME}\` | 🆕 Created |" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "| ${ENV} | \`${APP_NAME}\` | ⚠️ Manifest not found |" >> $GITHUB_STEP_SUMMARY
               fi
+            else
+              echo "| ${ENV} | \`${APP_NAME}\` | ⚠️ Manifest not found |" >> $GITHUB_STEP_SUMMARY
             fi
           done
 
