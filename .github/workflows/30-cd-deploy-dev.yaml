@@ -205,29 +205,36 @@ jobs:
           aws eks update-kubeconfig --name ${{ env.HUB_CLUSTER }} --region ${{ env.AWS_REGION }}
           
           APP_NAME="${{ env.APP_NAME }}-${{ env.ENVIRONMENT }}"
-          MAX_ATTEMPTS=30
+          TIMEOUT=180
+          ELAPSED=0
+          INTERVAL=5
           
           echo "### ✅ Deployment Verification" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           
-          for i in $(seq 1 $MAX_ATTEMPTS); do
+          while [ $ELAPSED -lt $TIMEOUT ]; do
             SYNC=$(kubectl get application "${APP_NAME}" -n argocd -o jsonpath='{.status.sync.status}' 2>/dev/null || echo "Unknown")
             HEALTH=$(kubectl get application "${APP_NAME}" -n argocd -o jsonpath='{.status.health.status}' 2>/dev/null || echo "Unknown")
             
-            echo "[$i/$MAX_ATTEMPTS] Sync: ${SYNC}, Health: ${HEALTH}"
+            echo "[${ELAPSED}s/${TIMEOUT}s] Sync: ${SYNC}, Health: ${HEALTH}"
             
             if [ "$SYNC" = "Synced" ] && [ "$HEALTH" = "Healthy" ]; then
               echo "| Sync Status | ✅ ${SYNC} |" >> $GITHUB_STEP_SUMMARY
               echo "| Health Status | 🟢 ${HEALTH} |" >> $GITHUB_STEP_SUMMARY
+              echo "| Time to Healthy | ⏱️ ${ELAPSED}s |" >> $GITHUB_STEP_SUMMARY
               echo "healthy=true" >> $GITHUB_OUTPUT
               exit 0
             fi
             
-            sleep 10
+            sleep $INTERVAL
+            ELAPSED=$((ELAPSED + INTERVAL))
+            # Exponential backoff: 5s -> 7s -> 9s -> ... -> 15s max
+            [ $INTERVAL -lt 15 ] && INTERVAL=$((INTERVAL + 2))
           done
           
           echo "| Sync Status | ⚠️ ${SYNC} |" >> $GITHUB_STEP_SUMMARY
           echo "| Health Status | ⚠️ ${HEALTH} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Timeout | ⏱️ ${TIMEOUT}s |" >> $GITHUB_STEP_SUMMARY
           echo "healthy=false" >> $GITHUB_OUTPUT
 
   # ════════════════════════════════════════════════════════════════════════════════
